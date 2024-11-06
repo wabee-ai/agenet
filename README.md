@@ -36,36 +36,6 @@ To illustrate the message flow, let’s follow an example where a client sends a
 ## Macro Architecture Diagram
 The following diagram provides a visual representation of this flow, illustrating how each component interacts to complete the action processing cycle.
 
-```dot
-digraph MacroArchitecture {
-    rankdir=TB;  // Top-to-Bottom layout
-    
-    // Define a general font and style
-    graph [fontname="Helvetica", fontsize=12];
-    node [shape=box, style=filled, fontcolor=white, fontname="Helvetica"];
-    edge [fontname="Helvetica"];
-    
-    // Define nodes with specific colors for each category
-    Client [label="Client\n(e.g., sends 'Read File' action)", fillcolor="#4CAF50"];
-    Receiver [label="Receiver", fillcolor="#2196F3"];
-    Listener [label="Listener", fillcolor="#2196F3"];
-    ActionResolver [label="ActionResolver", fillcolor="#2196F3"];
-    
-    // Define queues with distinct styling
-    MessageQueue [label="Message Queue\n(Action Channel)", shape=ellipse, fillcolor="#FFC107", fontcolor=black];
-    ResponseQueue [label="Response Queue", shape=ellipse, fillcolor="#FFC107", fontcolor=black];
-    
-    // Define edges with labels and different styles for sending vs connecting
-    Client -> Receiver [label="Send Action: 'Read File'"];
-    Receiver -> MessageQueue [label="Route to 'Read File' Action Channel"];
-    
-    // Connections instead of sending arrows for persistent listening connections
-    Receiver -> ResponseQueue [style=dashed, label="Connect to Response Queue"];
-    MessageQueue -> Listener [style=dashed, label="Connect to 'Read File' Action Channel"];
-    
-    Listener -> ActionResolver [label="Forward Action to ActionResolver"];
-    ActionResolver -> Listener [label="Return Response to Listener"];
-    Listener -> ResponseQueue [label="Route to Response Queue"];
-    ResponseQueue -> Receiver [label="Receive Response"];
-    Receiver -> Client [label="Forward Response to Client"];
-}
+## Macro Architecture Diagram
+
+![Macro Architecture Diagram](assets/arch_1.png)
