@@ -26,16 +26,18 @@ The system consists of the following core components:
 ## Example Flow: "Read File" Action
 To illustrate the message flow, let’s follow an example where a client sends a "Read File" action:
 
-1. **Client** sends a `"Read File"` action to the **Receiver**.
-2. **Receiver** routes the action to the **Message Queue** specifically designated for `"Read File"`.
-3. **Listener** connects to this **Message Queue** to receive `"Read File"` actions and forwards the message to the **ActionResolver**.
-4. **ActionResolver** processes the action, reads the requested file, and sends the response back to the **Listener**.
-5. **Listener** routes the response to the **Response Queue**.
-6. **Receiver** receives the response from the **Response Queue** and forwards it to the **Client**.
+1. **Client** sends a `"Read File"` action to the **Receiver** via a bidirectional gRPC connection.
+2. **Receiver** generates a unique ID (UUID) for the action if the client didn’t provide one and assigns a timestamp to the message.
+3. **Receiver** routes the action to the **Message Queue** specifically designated for `"Read File"` actions.
+4. **Receiver** then establishes a persistent connection to a **Response Queue** uniquely identified by the UUID, where it will listen for a response tied to the action ID.
+5. **Listener** connects to the **Message Queue** for `"Read File"` actions, where it receives the message and forwards it to the **ActionResolver**.
+6. **ActionResolver** processes the action by performing the requested operation (e.g., reading the file) and prepares a response.
+7. **ActionResolver** sends the response back to the **Listener**.
+8. **Listener** routes the response to the **UUID-based Response Queue**, associating it with the correct action ID for tracking.
+9. **Receiver** listens on the **UUID-based Response Queue**, where it identifies the response by the action ID.
+10. **Receiver** forwards the response to the **Client** through the gRPC connection, completing the cycle.
 
 ## Macro Architecture Diagram
 The following diagram provides a visual representation of this flow, illustrating how each component interacts to complete the action processing cycle.
-
-## Macro Architecture Diagram
 
 ![Macro Architecture Diagram](assets/arch_1.png)
