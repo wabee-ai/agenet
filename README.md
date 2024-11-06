@@ -53,23 +53,23 @@ The following diagram provides a visual representation of this flow, illustratin
 
 ```mermaid
 flowchart TB
-    %% Define nodes with specific colors for each category
-    Client([Client\n(e.g., sends 'Read File' action)]):::client
+    %% Define nodes
+    Client([Client: sends 'read_file' action]):::client
     Receiver([Receiver]):::component
     Listener([Listener]):::component
     ActionResolver([ActionResolver]):::component
     
-    %% Define queues with distinct styling
-    MessageQueue([Message Queue\n(Action Channel)]):::queue
-    ResponseQueue([Response Queue\n(UUID-based)]):::queue
+    %% Define queues
+    MessageQueue([Message Queue - Action Channel]):::queue
+    ResponseQueue([Response Queue - UUID-based]):::queue
 
     %% Define edges with labels
-    Client -->|Send Action: 'Read File'| Receiver
-    Receiver -->|Route to 'Read File' Action Channel| MessageQueue
+    Client -->|Send Action: 'read_file'| Receiver
+    Receiver -->|Route to 'read_file' Action Channel| MessageQueue
     
     %% Connections instead of sending arrows for persistent listening connections
     Receiver -.->|Connect to UUID-based Response Queue| ResponseQueue
-    MessageQueue -.->|Connect to 'Read File' Action Channel| Listener
+    MessageQueue -.->|Connect to 'read_file' Action Channel| Listener
     
     Listener -->|Forward Action to ActionResolver| ActionResolver
     ActionResolver -->|Return Response to Listener| Listener
@@ -82,10 +82,13 @@ flowchart TB
     classDef component fill:#2196F3,stroke:#333,stroke-width:2px;
     classDef queue fill:#FFC107,stroke:#333,stroke-width:2px;
     
-    %% Apply styles
+    %% Apply styles to individual elements
     class Client client;
-    class Receiver, Listener, ActionResolver component;
-    class MessageQueue, ResponseQueue queue;
+    class Receiver component;
+    class Listener component;
+    class ActionResolver component;
+    class MessageQueue queue;
+    class ResponseQueue queue;
 ```
 
 
