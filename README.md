@@ -62,42 +62,59 @@ The following diagram provides a visual representation of this flow, illustratin
 
 ```mermaid
 flowchart TB
-    %% Define nodes
     Client([Client: sends 'read_file' action]):::client
     Broker([Broker]):::component
     Relay([Relay]):::component
-    Agent([Agent]):::component
+    Agent([File Agent]):::externalAgent
     
-    %% Define queues
-    MessageQueue([Message Queue - Action Channel]):::queue
-    ResponseQueue([Response Queue - UUID-based]):::queue
+    ActionChannel([Action Channel]):::queue
+    ResponseUUIDChannel([Response UUID Channel]):::queue
 
-    %% Define edges with labels
-    Client -->|Send Action: 'read_file'| Broker
-    Broker -->|Route to 'read_file' Action Channel| MessageQueue
-    
-    %% Connections instead of sending arrows for persistent listening connections
-    Broker -.->|Connect to UUID-based Response Queue| ResponseQueue
-    MessageQueue -.->|Connect to 'read_file' Action Channel| Relay
-    
-    Relay -->|Forward Action to Agent| Agent
-    Agent -->|Return Response to Relay| Relay
-    Relay -->|Route to UUID-based Response Queue| ResponseQueue
-    ResponseQueue -->|Receive Response| Broker
-    Broker -->|Forward Response to Client| Client
+    %% Steps as separate nodes with circular style
+    Step1((1)):::step
+    Step2((2)):::step
+    Step3((3)):::step
+    Step4((4)):::step
+    Step5((5)):::step
+    Step6((6)):::step
+    Step7((7)):::step
+    Step8((8)):::step
+    Step9((9)):::step
+
+    Client --> Step1
+    Step1 -->|Send Action: 'read_file'| Broker
+    Broker --> Step2
+    Step2 -->|Route to 'read_file' Action Channel| ActionChannel
+    Broker -.-> Step3
+    Step3 -.->|Connect to Response UUID Channel| ResponseUUIDChannel
+    ActionChannel -.-> Step4
+    Step4 -.->|Connect to 'read_file' Action Channel| Relay
+    Relay --> Step5
+    Step5 -->|Forward Action to File Agent| Agent
+    Agent --> Step6
+    Step6 -->|Return Response to Relay| Relay
+    Relay --> Step7
+    Step7 -->|Route to Response UUID Channel| ResponseUUIDChannel
+    ResponseUUIDChannel -.-> Step8
+    Step8 -.->|Receive Response| Broker
+    Broker --> Step9
+    Step9 -->|Forward Response to Client| Client
 
     %% Style definitions
     classDef client fill:#4CAF50,stroke:#333,stroke-width:2px;
     classDef component fill:#2196F3,stroke:#333,stroke-width:2px;
-    classDef queue fill:#D2691E,stroke:#333,stroke-width:2px;  %% Darker brown-orange for better contrast
-    
-    %% Apply styles to individual elements
+    classDef queue fill:#D2691E,stroke:#333,stroke-width:2px;
+    classDef externalAgent fill:#8A2BE2,stroke:#333,stroke-width:2px;
+    classDef step fill:#FF0000,stroke:#333,stroke-width:2px,color:#FFFFFF;
+
+    %% Apply styles
     class Client client;
     class Broker component;
     class Relay component;
-    class Agent component;
-    class MessageQueue queue;
-    class ResponseQueue queue;
+    class Agent externalAgent;
+    class ActionChannel queue;
+    class ResponseUUIDChannel queue;
+    class Step1,Step2,Step3,Step4,Step5,Step6,Step7,Step8,Step9 step;
 ```
 
 ---
