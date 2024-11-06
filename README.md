@@ -51,7 +51,44 @@ To illustrate the message flow, let’s follow an example where a client sends a
 ## Macro Architecture Diagram
 The following diagram provides a visual representation of this flow, illustrating how each component interacts to complete the action processing cycle.
 
-![Macro Architecture Diagram](assets/arch_1.png)
+```mermaid
+flowchart TB
+    %% Define nodes with specific colors for each category
+    Client([Client\n(e.g., sends 'Read File' action)]):::client
+    Receiver([Receiver]):::component
+    Listener([Listener]):::component
+    ActionResolver([ActionResolver]):::component
+    
+    %% Define queues with distinct styling
+    MessageQueue([Message Queue\n(Action Channel)]):::queue
+    ResponseQueue([Response Queue\n(UUID-based)]):::queue
+
+    %% Define edges with labels
+    Client -->|Send Action: 'Read File'| Receiver
+    Receiver -->|Route to 'Read File' Action Channel| MessageQueue
+    
+    %% Connections instead of sending arrows for persistent listening connections
+    Receiver -.->|Connect to UUID-based Response Queue| ResponseQueue
+    MessageQueue -.->|Connect to 'Read File' Action Channel| Listener
+    
+    Listener -->|Forward Action to ActionResolver| ActionResolver
+    ActionResolver -->|Return Response to Listener| Listener
+    Listener -->|Route to UUID-based Response Queue| ResponseQueue
+    ResponseQueue -->|Receive Response| Receiver
+    Receiver -->|Forward Response to Client| Client
+
+    %% Style definitions
+    classDef client fill:#4CAF50,stroke:#333,stroke-width:2px;
+    classDef component fill:#2196F3,stroke:#333,stroke-width:2px;
+    classDef queue fill:#FFC107,stroke:#333,stroke-width:2px;
+    
+    %% Apply styles
+    class Client client;
+    class Receiver, Listener, ActionResolver component;
+    class MessageQueue, ResponseQueue queue;
+```
+
+
 
 ---
 
