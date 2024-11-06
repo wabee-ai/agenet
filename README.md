@@ -35,6 +35,14 @@ The system consists of the following core components:
 2. **Relay**: Listens to the action-specific message queue and forwards the action to the designated handler service, known as the `Agent`.
 3. **Agent**: Processes the action and sends a response back through the Relay, which then forwards the response to the correct UUID-based response queue, allowing the Broker to send the final response back to the client.
 
+## Documentation Index
+- [Broker Component](./docs/components/broker.md): Entry point for client messages, responsible for generating UUIDs and routing actions.
+- [Relay Component](./docs/components/relay.md): Connects to action queues and forwards messages to the Agent.
+- [Agent Component](./docs/components/agent.md): Processes specific actions and returns responses through the Relay.
+- [Message Queue Configuration](./docs/components/message_queue.md): Configuration details for action channels and response queues.
+- [gRPC Interface](./docs/components/grpc_interface.md): Specifications and methods for bidirectional gRPC communication.
+
+
 ## Example Flow: "read_file" Action
 To illustrate the message flow, let’s follow an example where a client sends a "read_file" action:
 
