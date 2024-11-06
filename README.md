@@ -80,7 +80,7 @@ flowchart TB
     %% Style definitions
     classDef client fill:#4CAF50,stroke:#333,stroke-width:2px;
     classDef component fill:#2196F3,stroke:#333,stroke-width:2px;
-    classDef queue fill:#FFC107,stroke:#333,stroke-width:2px;
+    classDef queue fill:#D2691E,stroke:#333,stroke-width:2px;  %% Darker brown-orange for better contrast
     
     %% Apply styles to individual elements
     class Client client;
