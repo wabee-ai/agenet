@@ -45,7 +45,7 @@ The following is an example of a payload received by the Receiver, with an actio
     "example_key": "example_value"
   }
 }
-
+```
 
 
 ```mermaid
@@ -60,3 +60,4 @@ stateDiagram-v2
     WaitingForResponse --> TimeoutError : Timeout Occurs
     Forwarding --> [*] : Send Response to Client
     TimeoutError --> [*] : Send Error to Client
+```
