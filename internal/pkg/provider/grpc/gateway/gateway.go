@@ -11,8 +11,8 @@ type gateway struct {
 	gatewaypb.UnimplementedGatewayServiceServer
 }
 
-// Communicate handles bidirectional streaming for the Gateway
-func (p *gateway) Communicate(stream gatewaypb.GatewayService_CommunicateServer) error {
+// Send handles bidirectional streaming for the Gateway
+func (p *gateway) Send(stream gatewaypb.GatewayService_CommunicateServer) error {
 	logger := log.FromContext(stream.Context())
 
 	for {

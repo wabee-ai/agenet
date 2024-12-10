@@ -20,14 +20,14 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	GatewayService_Communicate_FullMethodName = "/gateway.GatewayService/Communicate"
+	GatewayService_Send_FullMethodName = "/gateway.GatewayService/Send"
 )
 
 // GatewayServiceClient is the client API for GatewayService service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type GatewayServiceClient interface {
-	Communicate(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[common.Request, common.Response], error)
+	Send(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[common.Request, common.Response], error)
 }
 
 type gatewayServiceClient struct {
@@ -38,9 +38,9 @@ func NewGatewayServiceClient(cc grpc.ClientConnInterface) GatewayServiceClient {
 	return &gatewayServiceClient{cc}
 }
 
-func (c *gatewayServiceClient) Communicate(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[common.Request, common.Response], error) {
+func (c *gatewayServiceClient) Send(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[common.Request, common.Response], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	stream, err := c.cc.NewStream(ctx, &GatewayService_ServiceDesc.Streams[0], GatewayService_Communicate_FullMethodName, cOpts...)
+	stream, err := c.cc.NewStream(ctx, &GatewayService_ServiceDesc.Streams[0], GatewayService_Send_FullMethodName, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -49,13 +49,13 @@ func (c *gatewayServiceClient) Communicate(ctx context.Context, opts ...grpc.Cal
 }
 
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
-type GatewayService_CommunicateClient = grpc.BidiStreamingClient[common.Request, common.Response]
+type GatewayService_SendClient = grpc.BidiStreamingClient[common.Request, common.Response]
 
 // GatewayServiceServer is the server API for GatewayService service.
 // All implementations must embed UnimplementedGatewayServiceServer
 // for forward compatibility.
 type GatewayServiceServer interface {
-	Communicate(grpc.BidiStreamingServer[common.Request, common.Response]) error
+	Send(grpc.BidiStreamingServer[common.Request, common.Response]) error
 	mustEmbedUnimplementedGatewayServiceServer()
 }
 
@@ -66,8 +66,8 @@ type GatewayServiceServer interface {
 // pointer dereference when methods are called.
 type UnimplementedGatewayServiceServer struct{}
 
-func (UnimplementedGatewayServiceServer) Communicate(grpc.BidiStreamingServer[common.Request, common.Response]) error {
-	return status.Errorf(codes.Unimplemented, "method Communicate not implemented")
+func (UnimplementedGatewayServiceServer) Send(grpc.BidiStreamingServer[common.Request, common.Response]) error {
+	return status.Errorf(codes.Unimplemented, "method Send not implemented")
 }
 func (UnimplementedGatewayServiceServer) mustEmbedUnimplementedGatewayServiceServer() {}
 func (UnimplementedGatewayServiceServer) testEmbeddedByValue()                        {}
@@ -90,12 +90,12 @@ func RegisterGatewayServiceServer(s grpc.ServiceRegistrar, srv GatewayServiceSer
 	s.RegisterService(&GatewayService_ServiceDesc, srv)
 }
 
-func _GatewayService_Communicate_Handler(srv interface{}, stream grpc.ServerStream) error {
-	return srv.(GatewayServiceServer).Communicate(&grpc.GenericServerStream[common.Request, common.Response]{ServerStream: stream})
+func _GatewayService_Send_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(GatewayServiceServer).Send(&grpc.GenericServerStream[common.Request, common.Response]{ServerStream: stream})
 }
 
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
-type GatewayService_CommunicateServer = grpc.BidiStreamingServer[common.Request, common.Response]
+type GatewayService_SendServer = grpc.BidiStreamingServer[common.Request, common.Response]
 
 // GatewayService_ServiceDesc is the grpc.ServiceDesc for GatewayService service.
 // It's only intended for direct use with grpc.RegisterService,
@@ -106,8 +106,8 @@ var GatewayService_ServiceDesc = grpc.ServiceDesc{
 	Methods:     []grpc.MethodDesc{},
 	Streams: []grpc.StreamDesc{
 		{
-			StreamName:    "Communicate",
-			Handler:       _GatewayService_Communicate_Handler,
+			StreamName:    "Send",
+			Handler:       _GatewayService_Send_Handler,
 			ServerStreams: true,
 			ClientStreams: true,
 		},
