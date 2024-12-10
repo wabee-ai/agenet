@@ -7,5 +7,5 @@ import "common/common.proto";
 option go_package = "github.com/wabee-ai/agenet/pkg/grpc/gateway";
 
 service GatewayService {
-  rpc Send(stream common.Request) returns (stream common.Response);
+  rpc Send(common.Request) returns (stream common.Response);
 }

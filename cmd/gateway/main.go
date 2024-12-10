@@ -25,7 +25,7 @@ func main() {
 	srv := server.NewServer(ctx, log.Register)
 
 	// Register the Gateway
-	gatewaypb.RegisterGatewayServiceServer(srv.ServiceRegistrar(), gateway.NewProvider())
+	gatewaypb.RegisterGatewayServiceServer(srv.ServiceRegistrar(), gateway.New())
 
 	// Start serving
 	srv.Serve(ctx)

@@ -27,7 +27,7 @@ const (
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type GatewayServiceClient interface {
-	Send(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[common.Request, common.Response], error)
+	Send(ctx context.Context, in *common.Request, opts ...grpc.CallOption) (grpc.ServerStreamingClient[common.Response], error)
 }
 
 type gatewayServiceClient struct {
@@ -38,24 +38,30 @@ func NewGatewayServiceClient(cc grpc.ClientConnInterface) GatewayServiceClient {
 	return &gatewayServiceClient{cc}
 }
 
-func (c *gatewayServiceClient) Send(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[common.Request, common.Response], error) {
+func (c *gatewayServiceClient) Send(ctx context.Context, in *common.Request, opts ...grpc.CallOption) (grpc.ServerStreamingClient[common.Response], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	stream, err := c.cc.NewStream(ctx, &GatewayService_ServiceDesc.Streams[0], GatewayService_Send_FullMethodName, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	x := &grpc.GenericClientStream[common.Request, common.Response]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
 	return x, nil
 }
 
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
-type GatewayService_SendClient = grpc.BidiStreamingClient[common.Request, common.Response]
+type GatewayService_SendClient = grpc.ServerStreamingClient[common.Response]
 
 // GatewayServiceServer is the server API for GatewayService service.
 // All implementations must embed UnimplementedGatewayServiceServer
 // for forward compatibility.
 type GatewayServiceServer interface {
-	Send(grpc.BidiStreamingServer[common.Request, common.Response]) error
+	Send(*common.Request, grpc.ServerStreamingServer[common.Response]) error
 	mustEmbedUnimplementedGatewayServiceServer()
 }
 
@@ -66,7 +72,7 @@ type GatewayServiceServer interface {
 // pointer dereference when methods are called.
 type UnimplementedGatewayServiceServer struct{}
 
-func (UnimplementedGatewayServiceServer) Send(grpc.BidiStreamingServer[common.Request, common.Response]) error {
+func (UnimplementedGatewayServiceServer) Send(*common.Request, grpc.ServerStreamingServer[common.Response]) error {
 	return status.Errorf(codes.Unimplemented, "method Send not implemented")
 }
 func (UnimplementedGatewayServiceServer) mustEmbedUnimplementedGatewayServiceServer() {}
@@ -91,11 +97,15 @@ func RegisterGatewayServiceServer(s grpc.ServiceRegistrar, srv GatewayServiceSer
 }
 
 func _GatewayService_Send_Handler(srv interface{}, stream grpc.ServerStream) error {
-	return srv.(GatewayServiceServer).Send(&grpc.GenericServerStream[common.Request, common.Response]{ServerStream: stream})
+	m := new(common.Request)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(GatewayServiceServer).Send(m, &grpc.GenericServerStream[common.Request, common.Response]{ServerStream: stream})
 }
 
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
-type GatewayService_SendServer = grpc.BidiStreamingServer[common.Request, common.Response]
+type GatewayService_SendServer = grpc.ServerStreamingServer[common.Response]
 
 // GatewayService_ServiceDesc is the grpc.ServiceDesc for GatewayService service.
 // It's only intended for direct use with grpc.RegisterService,
@@ -109,7 +119,6 @@ var GatewayService_ServiceDesc = grpc.ServiceDesc{
 			StreamName:    "Send",
 			Handler:       _GatewayService_Send_Handler,
 			ServerStreams: true,
-			ClientStreams: true,
 		},
 	},
 	Metadata: "gateway/gateway.proto",
