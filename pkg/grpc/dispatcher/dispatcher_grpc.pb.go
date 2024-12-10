@@ -20,7 +20,7 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	DispatcherService_Communicate_FullMethodName   = "/dispatcher.DispatcherService/Communicate"
+	DispatcherService_Send_FullMethodName          = "/dispatcher.DispatcherService/Send"
 	DispatcherService_RegisterAgent_FullMethodName = "/dispatcher.DispatcherService/RegisterAgent"
 )
 
@@ -28,7 +28,7 @@ const (
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type DispatcherServiceClient interface {
-	Communicate(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[common.Request, common.Response], error)
+	Send(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[common.Request, common.Response], error)
 	RegisterAgent(ctx context.Context, in *AgentRegistration, opts ...grpc.CallOption) (*common.Response, error)
 }
 
@@ -40,9 +40,9 @@ func NewDispatcherServiceClient(cc grpc.ClientConnInterface) DispatcherServiceCl
 	return &dispatcherServiceClient{cc}
 }
 
-func (c *dispatcherServiceClient) Communicate(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[common.Request, common.Response], error) {
+func (c *dispatcherServiceClient) Send(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[common.Request, common.Response], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	stream, err := c.cc.NewStream(ctx, &DispatcherService_ServiceDesc.Streams[0], DispatcherService_Communicate_FullMethodName, cOpts...)
+	stream, err := c.cc.NewStream(ctx, &DispatcherService_ServiceDesc.Streams[0], DispatcherService_Send_FullMethodName, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -51,7 +51,7 @@ func (c *dispatcherServiceClient) Communicate(ctx context.Context, opts ...grpc.
 }
 
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
-type DispatcherService_CommunicateClient = grpc.BidiStreamingClient[common.Request, common.Response]
+type DispatcherService_SendClient = grpc.BidiStreamingClient[common.Request, common.Response]
 
 func (c *dispatcherServiceClient) RegisterAgent(ctx context.Context, in *AgentRegistration, opts ...grpc.CallOption) (*common.Response, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
@@ -67,7 +67,7 @@ func (c *dispatcherServiceClient) RegisterAgent(ctx context.Context, in *AgentRe
 // All implementations must embed UnimplementedDispatcherServiceServer
 // for forward compatibility.
 type DispatcherServiceServer interface {
-	Communicate(grpc.BidiStreamingServer[common.Request, common.Response]) error
+	Send(grpc.BidiStreamingServer[common.Request, common.Response]) error
 	RegisterAgent(context.Context, *AgentRegistration) (*common.Response, error)
 	mustEmbedUnimplementedDispatcherServiceServer()
 }
@@ -79,8 +79,8 @@ type DispatcherServiceServer interface {
 // pointer dereference when methods are called.
 type UnimplementedDispatcherServiceServer struct{}
 
-func (UnimplementedDispatcherServiceServer) Communicate(grpc.BidiStreamingServer[common.Request, common.Response]) error {
-	return status.Errorf(codes.Unimplemented, "method Communicate not implemented")
+func (UnimplementedDispatcherServiceServer) Send(grpc.BidiStreamingServer[common.Request, common.Response]) error {
+	return status.Errorf(codes.Unimplemented, "method Send not implemented")
 }
 func (UnimplementedDispatcherServiceServer) RegisterAgent(context.Context, *AgentRegistration) (*common.Response, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RegisterAgent not implemented")
@@ -106,12 +106,12 @@ func RegisterDispatcherServiceServer(s grpc.ServiceRegistrar, srv DispatcherServ
 	s.RegisterService(&DispatcherService_ServiceDesc, srv)
 }
 
-func _DispatcherService_Communicate_Handler(srv interface{}, stream grpc.ServerStream) error {
-	return srv.(DispatcherServiceServer).Communicate(&grpc.GenericServerStream[common.Request, common.Response]{ServerStream: stream})
+func _DispatcherService_Send_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(DispatcherServiceServer).Send(&grpc.GenericServerStream[common.Request, common.Response]{ServerStream: stream})
 }
 
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
-type DispatcherService_CommunicateServer = grpc.BidiStreamingServer[common.Request, common.Response]
+type DispatcherService_SendServer = grpc.BidiStreamingServer[common.Request, common.Response]
 
 func _DispatcherService_RegisterAgent_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(AgentRegistration)
@@ -145,8 +145,8 @@ var DispatcherService_ServiceDesc = grpc.ServiceDesc{
 	},
 	Streams: []grpc.StreamDesc{
 		{
-			StreamName:    "Communicate",
-			Handler:       _DispatcherService_Communicate_Handler,
+			StreamName:    "Send",
+			Handler:       _DispatcherService_Send_Handler,
 			ServerStreams: true,
 			ClientStreams: true,
 		},

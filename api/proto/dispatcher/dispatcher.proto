@@ -12,6 +12,6 @@ message AgentRegistration {
 }
 
 service DispatcherService {
-  rpc Communicate(stream common.Request) returns (stream common.Response);
+  rpc Send(stream common.Request) returns (stream common.Response);
   rpc RegisterAgent(AgentRegistration) returns (common.Response);
 }
