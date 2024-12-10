@@ -7,7 +7,12 @@ import (
 	"github.com/xgodev/boost"
 	"github.com/xgodev/boost/factory/contrib/google.golang.org/grpc/v1/server"
 	"github.com/xgodev/boost/factory/contrib/google.golang.org/grpc/v1/server/plugins/local/wrapper/log"
+	"os"
 )
+
+func init() {
+	os.Setenv("BOOST_BANNER_PHRASE", "AGENET Gateway")
+}
 
 func main() {
 	// Create a base context
