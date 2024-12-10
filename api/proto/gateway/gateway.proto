@@ -1,0 +1,11 @@
+syntax = "proto3";
+
+package gateway;
+
+import "common/common.proto";
+
+option go_package = "github.com/wabee-ai/agenet/pkg/grpc/gateway";
+
+service GatewayService {
+  rpc Communicate(stream common.Request) returns (stream common.Response);
+}

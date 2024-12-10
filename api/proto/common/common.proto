@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+package common;
+
+option go_package = "github.com/wabee-ai/agenet/pkg/grpc/common";
+
+// General request message
+message Request {
+  string uuid = 1;
+  string requestType = 2;
+  string contentType = 3;
+  bytes data = 4;
+  map<string, string> metadata = 5;
+}
+
+// General response message
+message Response {
+  string uuid = 1;
+  string status = 2;
+  string contentType = 3;
+  bytes data = 4;
+  map<string, string> metadata = 5;
+}

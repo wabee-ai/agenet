@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+package dispatcher;
+
+import "common/common.proto";
+
+option go_package = "github.com/wabee-ai/agenet/pkg/grpc/dispatcher";
+
+message AgentRegistration {
+  string requestType = 1;
+  map<string, string> metadata = 2;
+}
+
+service DispatcherService {
+  rpc Communicate(stream common.Request) returns (stream common.Response);
+  rpc RegisterAgent(AgentRegistration) returns (common.Response);
+}
