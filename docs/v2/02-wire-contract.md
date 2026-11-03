@@ -114,8 +114,9 @@ message Detach    { bool drain = 1; }
 message TaskEvent {
   string task_id                = 1;
   string lease                  = 2;
-  uint64 seq                    = 3;            // monotonic per task; Dispatcher dedupes on (task_id, seq)
-  a2a.v1.StreamResponse body    = 4;            // statusUpdate | artifactUpdate | message
+  uint32 attempt                = 3;            // echoed from Deliver.attempt
+  uint64 seq                    = 4;            // monotonic per (task_id, attempt), starts at 1 each attempt
+  a2a.v1.StreamResponse body    = 5;            // statusUpdate | artifactUpdate | message
 }
 
 message DispatchFrame {
@@ -166,8 +167,12 @@ message Shutdown { bool drain = 1; uint32 grace_seconds = 2; }
 - `Ack` within `ackTimeout` (default 5 s) or the lease expires and the task is redelivered.
   `Heartbeat` every `heartbeatInterval` (default 10 s) listing in-flight tasks; three missed
   heartbeats release all of the instance's leases.
-- `TaskEvent.seq` is per-task and monotonic. After reconnect, the agent resends events the
-  Dispatcher may have missed; the Dispatcher ignores duplicates.
+- `TaskEvent.seq` is monotonic per `(task_id, attempt)` and restarts at 1 on every delivery
+  attempt, so a new instance never needs to know the previous attempt's counter. The Dispatcher
+  deduplicates producer events on `(task_id, attempt, seq)` and drops events whose `attempt`
+  or `lease` is not the current one. The task store assigns each accepted event a separate
+  task-global log offset (`agenet.io/offset`) that clients use for replay. After reconnect,
+  the agent resends events the Dispatcher may have missed; duplicates are ignored.
 - `Shutdown{drain=true}` means finish in-flight tasks, send no new ones, then reconnect to one
   of `dispatcher_endpoints`.
 

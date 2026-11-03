@@ -15,7 +15,8 @@ communication, ASI08 cascading failures).
 - Client registration uses Client ID Metadata Documents; Dynamic Client Registration is
   accepted only for authorization servers that lack CIMD support, mirroring MCP 2026-07-28.
 - Human-initiated calls carry an end-user token. Service-initiated calls carry client
-  credentials. Agents on the mesh calling back in carry their **task token** (below).
+  credentials. Agents on the mesh calling back in carry a **callback token** (below); the
+  Gateway never accepts a task token directly, because its audience is the agent, not the mesh.
 
 ### Task tokens: no passthrough
 
@@ -36,6 +37,25 @@ mesh's authorization server issues an ID-JAG assertion (IETF identity assertion 
 grant, as shipped by Okta Cross App Access and Auth0) that the agent exchanges with the
 third party's authorization server. The agent never sees a token for anything but its own
 audience.
+
+### Callback tokens: agents calling the mesh
+
+When an agent needs another skill, it must present a credential whose audience is the mesh.
+It obtains one by RFC 8693 token exchange at the mesh's authorization server:
+
+| Parameter | Value |
+|---|---|
+| `subject_token` | the task token it received (`aud` = this agent) |
+| `actor_token` | its workload credential (SPIFFE JWT-SVID or client-credentials token) |
+| `resource` | the mesh's resource indicator |
+| `scope` | the skill it intends to call |
+
+The authorization server verifies that the actor is the task token's audience, then issues a
+**callback token** with `aud` = mesh, the same `sub`, `agenet_task`, and `agenet_ctx` claims,
+and the actor appended to the `act` chain. The Gateway treats it like any caller token and
+performs the next exchange toward the target agent. Task-token audience isolation is
+preserved: a stolen task token is still useless at the Gateway without the agent's workload
+credential, and a callback token is bound to one task and context.
 
 ### Agents to the Dispatcher
 

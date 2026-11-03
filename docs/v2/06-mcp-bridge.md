@@ -15,8 +15,12 @@ The tool-agent adapter is a small process that:
    - `id` = tool `name`; `description`, `title` copied; `inputModes=["application/json"]`,
      `outputModes=["application/json", "text/plain"]`.
    - `metadata["agenet.io/inputSchema"]` = `inputSchema`; `outputSchema` likewise.
-   - `agenet.io/sideEffects` derived from annotations: `readOnlyHint` → `none`,
-     `destructiveHint` → `external`, else `local`. `agenet.io/idempotent` = `idempotentHint`.
+   - `agenet.io/sideEffects` derived from annotations **after applying MCP's defaults**
+     (`readOnlyHint` defaults to `false`, `destructiveHint` to `true`, `idempotentHint` to
+     `false`, `openWorldHint` to `true`): `readOnlyHint=true` → `none`; otherwise
+     `destructiveHint=true` → `external`; otherwise `local`. An unannotated tool is therefore
+     `external` and falls under the default approval policy. `agenet.io/idempotent` =
+     `idempotentHint` after defaults.
 3. Registers in dial-out mode and, on `Deliver`, translates:
    - The first `data` part of the message → `tools/call` arguments, validated against the schema.
    - `structuredContent` → a `data` artifact; `content[]` → text/raw/url artifacts;
@@ -40,7 +44,7 @@ The Gateway exposes `https://mesh.example/mcp` as a stateless MCP server:
 |---|---|
 | `server/discover` | Returns protocol versions, `capabilities.tools`, and the Tasks extension |
 | `tools/list` | One tool per visible skill; `inputSchema` from `agenet.io/inputSchema` or a generic `{parts[]}` schema; annotations derived from `sideEffects` and `idempotent`; deterministic order; `ttlMs`/`cacheScope` from the card index |
-| `tools/call` | `SendMessage` with `returnImmediately=false`. If the task completes within `agenet.io/syncWaitMs` (default 10 s) the result is returned inline as `structuredContent`; otherwise the facade returns a Tasks-extension handle |
+| `tools/call` | `SendMessage` with `returnImmediately=false`. The facade reads the per-request client capabilities in `_meta["io.modelcontextprotocol/clientCapabilities"]`. **If the client advertises the Tasks extension**: results that complete within `agenet.io/syncWaitMs` (default 10 s) are returned inline as `structuredContent`; otherwise a `CreateTaskResult` handle is returned. **If it does not**: the facade never changes response shape; it blocks up to `agenet.io/syncMaxWaitMs` (default 300 s, clamped by the task deadline), streaming `notifications/progress` on the response stream, then returns inline on completion or a tool result with `isError=true` and reason `TASK_TIMEOUT` carrying the Agenet `taskId` so the caller can retrieve it via A2A `GetTask` |
 | `tasks/get`, `tasks/cancel` | `GetTask`, `CancelTask` |
 | `tasks/update` | `SendMessage` follow-up on a parked task |
 | `INPUT_REQUIRED` while synchronous | MRTR `resultType: "input_required"`; `requestState` is the task id sealed with the mesh's AEAD key, bound to the principal and task, and expiring at the deadline |

@@ -127,9 +127,14 @@ sequenceDiagram
     G-->>C: stream: statusUpdate COMPLETED, close stream
 ```
 
-If the client's stream drops after step 5, the task keeps running. The client calls
-`SubscribeToTask(taskId)` on any Gateway replica and receives the log from the beginning or
-from the last offset it saw.
+If the client's stream drops after step 5, the task keeps running. The client recovers on any
+Gateway replica by calling `GetTask(taskId)` first: the snapshot carries the current status,
+all artifacts, and history, which is sufficient when the task has already reached a terminal
+state. If the task is still non-terminal, the client then calls `SubscribeToTask(taskId)` with
+`metadata["agenet.io/afterOffset"]` set to the log offset from the snapshot and receives only
+the events it missed. A2A requires `UnsupportedOperationError` for subscriptions to terminal
+tasks, and the Gateway honours that; replaying a finished task's full event log is available
+only through the optional `https://agenet.io/ext/replay/v1` extension.
 
 ## Pause flow: agent needs input
 
@@ -150,8 +155,10 @@ structured approval request in the status message.
 
 ## Agent-to-agent flow inside the mesh
 
-An agent that needs another skill calls the Gateway like any client, presenting the task token
-it received. The Gateway exchanges that token for a new one with the next agent as audience,
+An agent that needs another skill first exchanges its task token for a **mesh-audience
+callback token** (RFC 8693 token exchange with the task token as `subject_token` and its own
+workload credential as `actor_token`; see [05](05-identity-policy-observability.md)), then
+calls the Gateway like any client. The Gateway exchanges that token for a new one with the next agent as audience,
 appends the agent to the delegation chain, decrements the hop budget, and creates a child task
 whose `contextId` equals the parent's and whose message carries `referenceTaskIds=[parentTaskId]`.
 Cancelling the parent cancels children. Usage rolls up through `contextId`.

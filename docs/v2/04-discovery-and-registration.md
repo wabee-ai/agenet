@@ -70,9 +70,16 @@ tool and registers it in dial-out mode.
   `metadata["agenet.io/agents"]` lists the providing agent names, and
   `capabilities.extensions[]` advertises the routing extension. Unauthenticated callers get
   the public subset; `GetExtendedAgentCard` returns the full view after auth.
-- `GET /agents/{name}/.well-known/agent-card.json` returns the agent's own card with
-  `supportedInterfaces[]` rewritten to the virtual endpoint and `securitySchemes` replaced by
-  the Gateway's. A pure-A2A client uses this and never needs the extension.
+- `GET /agents/{name}/.well-known/agent-card.json` returns a **virtual card**: the agent's
+  card with `supportedInterfaces[]` rewritten to the virtual endpoint and `securitySchemes`
+  replaced by the Gateway's. Because A2A signatures cover the canonical card content, those
+  rewrites invalidate the agent's original `signatures[]`. The Gateway therefore strips them
+  and signs the virtual card with the **mesh signing key**, which tenants publish as a trust
+  anchor alongside their agent-provider keys. The virtual card records
+  `metadata["agenet.io/sourceCardHash"]`, the pinned hash of the original signed card, and the
+  original is served unmodified at `/agents/{name}/.well-known/agent-card.json?source=1` for
+  clients that want to verify the agent's own signature. A pure-A2A client uses the virtual
+  card and never needs the extension.
 - `GET /skills?tag=finance&inputMode=application/pdf` is a convenience search over the same
   index. Results carry `ttlMs` and `cacheScope`, matching MCP's `CacheableResult`.
 

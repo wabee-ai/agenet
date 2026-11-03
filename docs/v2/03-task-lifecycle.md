@@ -37,9 +37,9 @@ Delivery sub-states on the task record: `queued` (in a work queue, no lease),
 | Property | Rule |
 |---|---|
 | Durability | A task is persisted before the Gateway returns `SUBMITTED`. An accepted task is never lost by a Gateway, Dispatcher, or agent crash. |
-| Ordering | Events for one task are totally ordered by `seq`. No ordering across tasks. |
+| Ordering | Events for one task are totally ordered by the task store's log offset. Producer `seq` is scoped to `(taskId, attempt)` and is only used for producer-side deduplication. No ordering across tasks. |
 | Delivery to agents | At-least-once. Redelivery happens on `Ack` timeout, lease expiry, `Reject`, or instance loss **before `Ack`**. After `Ack`, redelivery requires the skill to be declared `idempotent` or the task `resumable`; otherwise the task fails with `OWNER_LOST`. |
-| Delivery to clients | At-least-once via `SubscribeToTask` replay; exactly-once observed by deduping on `(taskId, seq)`. |
+| Delivery to clients | At-least-once via `SubscribeToTask` replay; exactly-once observed by deduping on `(taskId, offset)`. |
 | Idempotency | `(tenant, messageId)` is unique for the dedupe window (default 24 h). A repeat with an identical payload returns the existing task; a repeat with a different payload is `IDEMPOTENCY_CONFLICT`. Durable-execution engines (Temporal, Restate, Inngest) retry freely. |
 | Deadlines | `agenet.io/deadlineMs` is absolute from acceptance. Expiry cancels with reason `DEADLINE_EXCEEDED`; parked tasks fail instead. |
 | Budgets | Usage is summed per task and per `contextId`. Exceeding any budget dimension fails the task and denies new child tasks in that context. |
@@ -48,8 +48,14 @@ Delivery sub-states on the task record: `queued` (in a work queue, no lease),
 ## Streaming and resumption
 
 - `SendStreamingMessage` and `SubscribeToTask` return A2A `StreamResponse` events read from the
-  log. Each event carries `metadata["agenet.io/seq"]`; a client resumes with
-  `SubscribeToTask` plus `metadata["agenet.io/afterSeq"]`.
+  log. Each event carries `metadata["agenet.io/offset"]`, the task-global log offset assigned
+  by the task store. A client resumes a **non-terminal** task with `SubscribeToTask` plus
+  `metadata["agenet.io/afterOffset"]`.
+- Recovery order after a dropped stream is `GetTask` first, then `SubscribeToTask` only if the
+  snapshot is non-terminal. Per A2A, `SubscribeToTask` on a terminal task returns
+  `UnsupportedOperationError`; the snapshot already holds the final status, artifacts, and
+  history. Clients that negotiate `https://agenet.io/ext/replay/v1` may additionally read a
+  terminal task's full event log with `ListTaskEvents(taskId, afterOffset)`.
 - Artifact chunks use A2A's `append` and `lastChunk`; the Gateway never buffers or reorders.
 - Stream close after a terminal event means done. Stream close by the client is **not**
   cancellation (it is in MCP, but A2A separates the two); use `CancelTask`.
