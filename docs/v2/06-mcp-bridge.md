@@ -1,0 +1,59 @@
+# Agenet v2 — MCP bridge
+
+MCP is the vertical protocol: agent → tools and data. Agenet speaks it in both directions so
+that tools join the mesh as skills and mesh skills appear as tools to any MCP host. The
+bridge targets MCP revision 2026-07-28 (stateless core, Tasks extension, MRTR).
+
+## Direction 1: MCP servers as agents ("tool agents")
+
+The tool-agent adapter is a small process that:
+
+1. Connects to an MCP server (stdio or Streamable HTTP), calls `server/discover` then
+   `tools/list`, and pins the result by hash. A changed tool list or description triggers
+   re-registration under the same rules as any card change.
+2. Synthesizes an `AgentCard` with one `AgentSkill` per tool:
+   - `id` = tool `name`; `description`, `title` copied; `inputModes=["application/json"]`,
+     `outputModes=["application/json", "text/plain"]`.
+   - `metadata["agenet.io/inputSchema"]` = `inputSchema`; `outputSchema` likewise.
+   - `agenet.io/sideEffects` derived from annotations: `readOnlyHint` → `none`,
+     `destructiveHint` → `external`, else `local`. `agenet.io/idempotent` = `idempotentHint`.
+3. Registers in dial-out mode and, on `Deliver`, translates:
+   - The first `data` part of the message → `tools/call` arguments, validated against the schema.
+   - `structuredContent` → a `data` artifact; `content[]` → text/raw/url artifacts;
+     `isError` → `FAILED` with the content as the status message.
+   - A `tools/call` that returns a task handle (Tasks extension) → the Agenet task stays
+     `WORKING`; the adapter polls `tasks/get` and forwards progress.
+   - An MRTR `resultType: "input_required"` → `INPUT_REQUIRED` with the `inputRequests`
+     as a data part; the caller's follow-up is sent back as `inputResponses` with the echoed
+     `requestState`, which the adapter stores on the task.
+4. Propagates `traceparent` into `_meta` and the task token as the MCP bearer token after
+   exchange for the MCP server's audience.
+
+Resources and prompts are exposed as read-only skills `resources/read` and `prompts/get`
+with the URI or name as the argument; `subscriptions/listen` is not bridged in v2.
+
+## Direction 2: mesh skills as MCP tools (the Gateway's MCP facade)
+
+The Gateway exposes `https://mesh.example/mcp` as a stateless MCP server:
+
+| MCP method | Agenet behaviour |
+|---|---|
+| `server/discover` | Returns protocol versions, `capabilities.tools`, and the Tasks extension |
+| `tools/list` | One tool per visible skill; `inputSchema` from `agenet.io/inputSchema` or a generic `{parts[]}` schema; annotations derived from `sideEffects` and `idempotent`; deterministic order; `ttlMs`/`cacheScope` from the card index |
+| `tools/call` | `SendMessage` with `returnImmediately=false`. If the task completes within `agenet.io/syncWaitMs` (default 10 s) the result is returned inline as `structuredContent`; otherwise the facade returns a Tasks-extension handle |
+| `tasks/get`, `tasks/cancel` | `GetTask`, `CancelTask` |
+| `tasks/update` | `SendMessage` follow-up on a parked task |
+| `INPUT_REQUIRED` while synchronous | MRTR `resultType: "input_required"`; `requestState` is the task id sealed with the mesh's AEAD key, bound to the principal and task, and expiring at the deadline |
+
+Headers: the facade requires `Mcp-Method` and `Mcp-Name`, mirrors `agenet.io/skill` into
+`Mcp-Param-Skill` via the `x-mcp-header` annotation, and validates header against body. Auth
+is the same OAuth 2.1 resource server as the A2A ingress, so one token works on both facades.
+
+Deprecated MCP features (roots, sampling, logging) are not implemented. An MCP host that wants
+an agent to call back into a model does so through its own provider API, as the MCP spec now
+recommends.
+
+## MCP Apps and Skills over MCP
+
+A tool agent may forward `ui://` resources (MCP Apps) and `skills/*` resources (Skills over
+MCP) as `url` parts with their media types. The mesh does not interpret them.
