@@ -20,17 +20,28 @@ communication, ASI08 cascading failures).
 
 ### Task tokens: no passthrough
 
-The Gateway never forwards the caller's token to an agent. For every delivery it mints, via
-RFC 8693 token exchange against the mesh's authorization server, a **task token** with:
+The caller's token never reaches an agent, and no agent-audience token exists before the
+destination is known. Issuance happens in two steps because several registered agents may
+provide the same skill and the Dispatcher picks among them per attempt:
+
+1. **Task grant (Gateway, once per task).** The Gateway exchanges the caller's token (RFC 8693)
+   for a grant with `aud = dispatchers:{tenant}`, `sub` = originating principal, the `act` chain,
+   `agenet_task`, `agenet_ctx`, `scope` = the requested skill, and `exp` = the task deadline.
+   The grant is persisted on the task record and is accepted only by Dispatchers.
+2. **Task token (Dispatcher, once per delivery attempt).** After policy and instance selection
+   the Dispatcher exchanges the grant for a **task token** whose audience is the chosen agent.
+   Redelivery to a different agent, or a new attempt on the same one, mints a new token; the
+   previous one is dead because its lease is gone.
 
 | Claim | Value |
 |---|---|
-| `aud` | the target agent's name (`agent:{tenant}/{name}`) |
+| `aud` | the selected agent's name (`agent:{tenant}/{name}`) |
 | `sub` | the originating principal |
-| `act` | nested actor chain: `{sub: gateway} → {sub: client} → ...` per RFC 8693 |
+| `act` | nested actor chain: `{sub: dispatcher} → {sub: gateway} → {sub: client} → ...` per RFC 8693 |
 | `agenet_task`, `agenet_ctx` | task and context ids; the token is useless for any other task |
+| `agenet_lease`, `agenet_attempt` | the delivery lease and attempt; agents MUST reject a token whose lease is not the one in `Deliver` |
 | `scope` | the skill id plus any downstream scopes the policy allowed |
-| `exp` | the task deadline |
+| `exp` | the earlier of the task deadline and the lease TTL |
 
 When the originating user's identity must reach a third-party API behind the agent, the
 mesh's authorization server issues an ID-JAG assertion (IETF identity assertion authorization
@@ -92,7 +103,8 @@ before delivery. Engines are pluggable; Cedar, OPA/Rego, and CEL are expected. I
   "tenant": "acme",
   "principal": { "sub": "alice@example.com", "iss": "https://idp.example", "roles": ["analyst"] },
   "delegation": [ ... ],
-  "skill": { "id": "summarize", "version": "2.1.0", "tags": ["finance"],
+  "skill": { "id": "summarize",                // "*" for an agent-wide request; hints are then the conservative merge
+             "version": "2.1.0", "tags": ["finance"],
              "sideEffects": "none", "dataClasses": ["pii"] },
   "agent": { "name": "summarize", "provider": "acme", "cardHash": "sha256:…", "labels": { "region": "eu" } },
   "request": { "inputModes": ["text/plain", "application/pdf"], "dataLabels": ["pii"],

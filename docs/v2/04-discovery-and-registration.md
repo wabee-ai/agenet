@@ -120,6 +120,12 @@ tool and registers it in dial-out mode.
   original is served unmodified at `/agents/{name}/.well-known/agent-card.json?source=1` for
   clients that want to verify the agent's own signature. A pure-A2A client uses the virtual
   card and never needs the extension.
+- `GET /agents/{name}/skills/{skill}/.well-known/agent-card.json` returns a **per-skill
+  virtual card**: the same document with `skills[]` reduced to that one skill and
+  `supportedInterfaces[]` pointing at the per-skill endpoint. Requests to that endpoint are
+  unambiguous without any metadata. Agent-level requests to a multi-skill agent that carry no
+  `agenet.io/skill` are treated as agent-wide with merged conservative hints (see
+  [02](02-wire-contract.md)).
 - `GET /skills?tag=finance&inputMode=application/pdf` is a convenience search over the same
   index. Results carry `ttlMs` and `cacheScope`, matching MCP's `CacheableResult`.
 

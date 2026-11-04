@@ -51,7 +51,9 @@ flowchart LR
   `/agents/{agent}/.well-known/agent-card.json`. A client that only speaks A2A can treat each
   virtual endpoint as an ordinary remote agent and never learn the mesh exists.
 - Authenticates the caller (OAuth 2.1 resource server), exchanges the caller's token for a
-  task-scoped internal token whose audience is the target agent, and attaches the delegation chain.
+  **task grant** whose audience is the mesh's Dispatchers, and attaches the delegation chain.
+  The grant is stored on the task record; the agent-audience task token is minted later by the
+  Dispatcher, once it knows which agent instance will receive the delivery.
 - Resolves the routing key (`agenet.io/skill`, or the virtual endpoint's agent), runs a policy
   pre-check on cheap attributes, assigns `taskId` and `contextId`, writes the task, and enqueues.
 - Serves `GetTask`, `ListTasks`, `SubscribeToTask`, `CancelTask`, and push-notification config
@@ -109,12 +111,13 @@ sequenceDiagram
     participant A as Agent (dial-out)
 
     C->>G: SendStreamingMessage(skill=summarize@2, parts, messageId, traceparent)
-    G->>G: authn · token exchange (aud=agent) · policy pre-check
+    G->>G: authn · exchange caller token for task grant (aud=dispatchers) · policy pre-check
     G->>T: create Task{SUBMITTED}, enqueue on skill queue, index messageId
     G-->>C: stream: Task{SUBMITTED}
     T->>D: deliver work item
-    D->>D: policy decision (principal, skill, card hash, tags, budget)
-    D->>A: Deliver{taskId, contextId, message, token, deadline}
+    D->>D: policy decision (principal, skill, card hash, tags, budget) · select instance
+    D->>D: exchange task grant for task token (aud=selected agent, bound to lease)
+    D->>A: Deliver{taskId, contextId, message, task_token, deadline}
     A-->>D: Ack{taskId}
     D->>T: commit lease, append TaskStatusUpdateEvent{WORKING}
     D->>A: Started{taskId, lease}

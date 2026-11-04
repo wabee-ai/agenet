@@ -13,8 +13,20 @@ The Gateway implements the A2A 1.0 `A2AService` exactly as specified: `SendMessa
 Two ways to target a skill:
 
 1. **Virtual endpoint** (no extension needed). `https://mesh.example/agents/{agent}` is a
-   complete A2A endpoint for one registered agent. Its card lists that agent's skills. This is
-   the recommended path for third-party clients.
+   complete A2A endpoint for one registered agent, and
+   `https://mesh.example/agents/{agent}/skills/{skill}` is a complete A2A endpoint for exactly
+   one of its skills (its card lists only that skill). The per-skill form is the recommended
+   path for third-party clients calling a multi-skill agent. On the agent-level form the
+   Gateway selects the skill in this order, never reading `parts[]`:
+   1. `Message.metadata["agenet.io/skill"]` if present (the key is honoured even without the
+      extension header);
+   2. the agent's only skill, if its card declares exactly one;
+   3. otherwise the request is **agent-wide**: `Deliver` carries no skill, the agent chooses
+      internally, and the Dispatcher applies the most conservative hints across the agent's
+      skills (`sideEffects` = highest of `none < local < external`, `idempotent` and
+      `resumable` = logical AND, `dataClasses` = intersection, `costHint` = maximum). Policy
+      sees `skill.id = "*"` with those merged values, so approval and redelivery rules can only
+      be stricter than for any individual skill.
 2. **Mesh endpoint with the routing extension.** `https://mesh.example/` accepts any skill on
    the mesh. The client sends the `A2A-Extensions: https://agenet.io/ext/routing/v1` header and
    sets routing keys in `Message.metadata`:
@@ -147,7 +159,7 @@ message Deliver {
   a2a.v1.Message message      = 5;
   a2a.v1.SendMessageConfiguration configuration = 6;
   repeated a2a.v1.Message history = 7;          // when resuming on a new instance
-  string task_token           = 8;              // audience-bound, task-scoped; see 05
+  string task_token           = 8;              // minted per attempt after instance selection; aud = this agent, bound to lease; see 05
   google.protobuf.Timestamp deadline = 9;
   map<string,string> metadata = 10;             // agenet.io/* keys and trace context
 }
