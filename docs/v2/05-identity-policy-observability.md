@@ -119,7 +119,8 @@ Policies the mesh ships as defaults:
 - Routing, authorization, and scheduling read only `agenet.io/*` metadata, the token, and the
   card. They never read `parts[]`. A prompt-injected payload cannot change where a task goes.
 - Agent descriptions, skill descriptions, and examples are rendered to callers as data; the
-  mesh card marks them `untrusted: true` so client-side LLMs can place them accordingly.
+  mesh card's routing extension sets `params.card.descriptionsUntrusted = true` so client-side
+  LLMs can place them accordingly.
 - Agents receive the delegation chain and policy decision, so an agent that is itself an LLM
   loop can implement Meta's "Rule of Two" (do not combine untrusted input, private data, and
   external communication in one session) with mesh-provided facts rather than guesses.
@@ -128,9 +129,13 @@ Policies the mesh ships as defaults:
 
 ### Tracing
 
-- `traceparent`, `tracestate`, and `baggage` are accepted from callers, propagated unchanged
-  to agents, and never minted by the mesh when present. Absent trace context is created at
-  the Gateway.
+- `traceparent`, `tracestate`, and `baggage` are accepted from callers and processed per the
+  W3C Trace Context model: the mesh **extracts** the incoming context, starts its own spans as
+  children, and **injects** the current mesh span's context into `Deliver.metadata` and into
+  every outbound A2A or MCP call. The trace id, `tracestate`, and `baggage` are preserved; the
+  parent span id is updated at each hop so the agent's SERVER span is a child of the Gateway's
+  CLIENT span and child tasks nest under their parent. The mesh never mints a new trace id when
+  one is present; absent trace context is created at the Gateway.
 - Spans follow the OpenTelemetry GenAI semantic conventions (`semantic-conventions-genai`,
   v1.42.0 or later):
 

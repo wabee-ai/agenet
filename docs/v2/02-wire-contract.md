@@ -128,6 +128,7 @@ message DispatchFrame {
     Cancel      cancel      = 13;
     Credit      credit      = 14;               // Dispatcher grants more credits
     Shutdown    shutdown    = 15;               // Dispatcher is going away; reconnect elsewhere
+    Started     started     = 16;               // Ack durably committed; safe to begin side effects
   }
 }
 
@@ -155,6 +156,7 @@ message Input  { string task_id = 1; string lease = 2; a2a.v1.Message message = 
 message Cancel { string task_id = 1; string lease = 2; google.rpc.Status reason = 3; }
 message Credit { uint32 credits = 1; }
 message Shutdown { bool drain = 1; uint32 grace_seconds = 2; }
+message Started { string task_id = 1; string lease = 2; uint32 attempt = 3; }
 ```
 
 ### Attach rules
@@ -165,6 +167,12 @@ message Shutdown { bool drain = 1; uint32 grace_seconds = 2; }
 - Delivery is credit-based. The Dispatcher never sends more `Deliver` frames than outstanding
   credits. Agents replenish with `Capacity` or by completing tasks.
 - `Ack` within `ackTimeout` (default 5 s) or the lease expires and the task is redelivered.
+  On `Ack` the Dispatcher durably records the lease in the task store **before** sending
+  `Started`. An agent whose skill is not `idempotent` MUST NOT begin side effects until it
+  receives `Started` for that `(task_id, lease, attempt)`; an idempotent skill MAY start on
+  `Ack`. If the stream fails between `Ack` and `Started`, the agent treats the attempt as
+  abandoned and the task store either has no committed lease (safe to redeliver) or has one
+  (handled as owner loss, see [03](03-task-lifecycle.md)).
   `Heartbeat` every `heartbeatInterval` (default 10 s) listing in-flight tasks; three missed
   heartbeats release all of the instance's leases.
 - `TaskEvent.seq` is monotonic per `(task_id, attempt)` and restarts at 1 on every delivery
@@ -190,9 +198,10 @@ bespoke service per the lifecycle policy.
 ## Versioning
 
 - Protocol version `2.0`. Clients send `A2A-Version` as A2A requires; the Gateway's card lists
-  `supportedInterfaces[].protocolVersion` for A2A and `agenet.io/version` in `capabilities.extensions`.
-- Skill versions follow semver in `AgentSkill.id` suffix (`summarize@2.1.0`) or in the skill's
-  `metadata["agenet.io/version"]`; clients request a range.
+  `supportedInterfaces[].protocolVersion` for A2A and `params.card.protocolVersion` on its
+  routing extension entry for Agenet.
+- Skill versions follow semver in the routing extension's `params.skills[<id>].version`
+  (see [04](04-discovery-and-registration.md)); clients request a range.
 - Features move Active → Deprecated (≥ 12 months, announced in the mesh card) → Removed.
 
 ## Error mapping

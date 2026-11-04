@@ -14,19 +14,47 @@ registration:
 | `securitySchemes`, `securityRequirements` | Describe what the *agent* expects on the task token (usually the mesh's own scheme) |
 | `supportedInterfaces[]` | For dial-out agents, empty on registration; the Dispatcher fills in the virtual endpoint. For pull-mode agents, the URL the Dispatcher will call. |
 | `signatures[]` | **Required.** JWS over the RFC 8785 canonical card. The key must chain to the tenant's trust anchors. |
-| `capabilities.extensions[]` | Must include `https://agenet.io/ext/routing/v1`; may include `https://agenet.io/ext/resumable/v1` and `https://agenet.io/ext/mcp-tools/v1` |
+| `capabilities.extensions[]` | Must include an `AgentExtension` with `uri = https://agenet.io/ext/routing/v1` whose `params` carry the Agenet hints below; may include `https://agenet.io/ext/resumable/v1` and `https://agenet.io/ext/mcp-tools/v1` |
 
-Agenet-specific hints live in `AgentSkill.metadata` and `AgentCard.metadata`:
+A2A 1.0's `AgentCard` and `AgentSkill` have no `metadata` field, so Agenet hints cannot ride on
+the card itself. They live in the `params` struct of the routing extension entry, keyed by
+skill id where they are per-skill. This survives the unmodified `a2a.v1.AgentCard` imported by
+`Register.card` and is covered by the card signature.
 
-| Key | Values | Effect |
-|---|---|---|
-| `agenet.io/version` | semver | Skill version for range matching |
-| `agenet.io/idempotent` | bool | Allows redelivery after `Ack` |
-| `agenet.io/resumable` | bool | Allows a parked task to move to another instance with history |
-| `agenet.io/sideEffects` | `none`, `local`, `external` | Mirrors MCP's `readOnlyHint`/`destructiveHint`; policy uses it to require approval |
-| `agenet.io/dataClasses` | list | Data classifications the skill may handle (`pii`, `phi`, `secret`); policy compares with the request's labels |
-| `agenet.io/costHint` | `{perCallUsd, tokensPerCall}` | Scheduling and budget pre-checks |
-| `agenet.io/maxInflight` | int | Default capacity if `Register.capacity` is omitted |
+```json
+{
+  "uri": "https://agenet.io/ext/routing/v1",
+  "required": false,
+  "params": {
+    "card": { "maxInflight": 16 },
+    "skills": {
+      "summarize": {
+        "version": "2.1.0",
+        "idempotent": true,
+        "resumable": true,
+        "sideEffects": "none",
+        "dataClasses": ["pii"],
+        "costHint": { "perCallUsd": 0.05, "tokensPerCall": 4000 },
+        "inputSchema": { "type": "object", "properties": { "question": { "type": "string" } } }
+      }
+    }
+  }
+}
+```
+
+| Key | Scope | Values | Effect |
+|---|---|---|---|
+| `version` | skill | semver | Skill version for range matching |
+| `idempotent` | skill | bool | Allows redelivery after a committed `Ack` |
+| `resumable` | skill | bool | Allows a parked task to move to another instance with history |
+| `sideEffects` | skill | `none`, `local`, `external` | Mirrors MCP's `readOnlyHint`/`destructiveHint`; policy uses it to require approval |
+| `dataClasses` | skill | list | Data classifications the skill may handle (`pii`, `phi`, `secret`); policy compares with the request's labels |
+| `costHint` | skill | `{perCallUsd, tokensPerCall}` | Scheduling and budget pre-checks |
+| `inputSchema`, `outputSchema` | skill | JSON Schema 2020-12 | Validation and MCP tool projection |
+| `maxInflight` | card | int | Default capacity if `Register.capacity` is omitted |
+
+Skills with no entry under `params.skills` get the conservative defaults `idempotent=false`,
+`resumable=false`, `sideEffects=external`.
 
 ## Pinning and rug-pull defense
 
@@ -54,9 +82,20 @@ plus the card signature. Multiple instances register the same card with differen
 
 An operator registers `{name, url, cardSource: fetched|pinned, auth}` with the Dispatcher.
 The Dispatcher fetches `/.well-known/agent-card.json`, verifies the signature, pins the hash,
-and thereafter acts as an A2A client: `SendStreamingMessage` for delivery, `SubscribeToTask`
-to recover after a dropped stream, `CancelTask` for cancellation. The card is re-fetched on
-the `ttlMs` cadence; a hash change follows the same rules as a dial-out re-registration.
+and thereafter acts as an A2A client. The delivery path depends on the pinned card's
+`capabilities`, because A2A requires streaming operations to fail when `streaming=false`:
+
+| Agent capabilities | Delivery | Progress | Recovery |
+|---|---|---|---|
+| `streaming=true` | `SendStreamingMessage` | events on the stream | `SubscribeToTask` while non-terminal, `GetTask` otherwise |
+| `streaming=false`, `pushNotifications=true` | `SendMessage` with a `TaskPushNotificationConfig` pointing at the Dispatcher's webhook | webhook callbacks, each followed by `GetTask` | `GetTask` |
+| `streaming=false`, `pushNotifications=false` | `SendMessage` | `GetTask` polling with backoff (`pullPollInterval`, default 2 s, capped at 30 s) | `GetTask` |
+
+In all three rows `CancelTask` is used for cancellation, the Dispatcher converts each observed
+status or artifact change into a task-store event with its own offset, and a `SendMessage`
+that returns a terminal `Task` inline closes the Agenet task in one step. The card is
+re-fetched on the `ttlMs` cadence; a hash change follows the same rules as a dial-out
+re-registration.
 
 ### Tool agent (MCP servers)
 
@@ -66,8 +105,8 @@ tool and registers it in dial-out mode.
 ## What clients see
 
 - `GET /.well-known/agent-card.json` on the Gateway returns the **mesh card**: `name` is the
-  mesh, `skills[]` is the union of registered skills the caller's token may see, each skill's
-  `metadata["agenet.io/agents"]` lists the providing agent names, and
+  mesh, `skills[]` is the union of registered skills the caller's token may see, the routing
+  extension's `params.skills[<id>].agents` lists the providing agent names, and
   `capabilities.extensions[]` advertises the routing extension. Unauthenticated callers get
   the public subset; `GetExtendedAgentCard` returns the full view after auth.
 - `GET /agents/{name}/.well-known/agent-card.json` returns a **virtual card**: the agent's
@@ -76,7 +115,8 @@ tool and registers it in dial-out mode.
   rewrites invalidate the agent's original `signatures[]`. The Gateway therefore strips them
   and signs the virtual card with the **mesh signing key**, which tenants publish as a trust
   anchor alongside their agent-provider keys. The virtual card records
-  `metadata["agenet.io/sourceCardHash"]`, the pinned hash of the original signed card, and the
+  `params.card.sourceCardHash` on its routing extension entry, the pinned hash of the original
+  signed card, and the
   original is served unmodified at `/agents/{name}/.well-known/agent-card.json?source=1` for
   clients that want to verify the agent's own signature. A pure-A2A client uses the virtual
   card and never needs the extension.

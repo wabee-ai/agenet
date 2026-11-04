@@ -78,7 +78,9 @@ semantics, not its implementation (NATS JetStream, Kafka, Postgres, and Redis St
 - Accepts outbound `Attach` streams from agents, validates the Agent Card signature, pins the
   card hash, and records the instance with its declared capacity.
 - Acts as an A2A *client* toward pull-mode agents that are reachable by URL, so existing A2A
-  servers join without an SDK.
+  servers join without an SDK. Streaming agents get `SendStreamingMessage`; non-streaming
+  agents get `SendMessage` plus push notifications or `GetTask` polling (see
+  [04](04-discovery-and-registration.md)).
 - Consumes work queues for the skills it has instances for, calls the policy decision point
   with full attributes, selects an instance (least-loaded, with optional `contextId` affinity),
   and delivers. Tracks leases and heartbeats; redelivers on ack timeout or instance loss when
@@ -114,7 +116,8 @@ sequenceDiagram
     D->>D: policy decision (principal, skill, card hash, tags, budget)
     D->>A: Deliver{taskId, contextId, message, token, deadline}
     A-->>D: Ack{taskId}
-    D->>T: append TaskStatusUpdateEvent{WORKING}
+    D->>T: commit lease, append TaskStatusUpdateEvent{WORKING}
+    D->>A: Started{taskId, lease}
     T-->>G: event
     G-->>C: stream: statusUpdate WORKING
     A-->>D: Event{artifactUpdate, append=true}

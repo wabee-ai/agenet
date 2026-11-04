@@ -38,7 +38,7 @@ Delivery sub-states on the task record: `queued` (in a work queue, no lease),
 |---|---|
 | Durability | A task is persisted before the Gateway returns `SUBMITTED`. An accepted task is never lost by a Gateway, Dispatcher, or agent crash. |
 | Ordering | Events for one task are totally ordered by the task store's log offset. Producer `seq` is scoped to `(taskId, attempt)` and is only used for producer-side deduplication. No ordering across tasks. |
-| Delivery to agents | At-least-once. Redelivery happens on `Ack` timeout, lease expiry, `Reject`, or instance loss **before `Ack`**. After `Ack`, redelivery requires the skill to be declared `idempotent` or the task `resumable`; otherwise the task fails with `OWNER_LOST`. |
+| Delivery to agents | At-least-once, gated by a committed lease. Redelivery is unconditional only while the task store holds **no committed lease** for the attempt: `Ack` timeout, `Reject`, or instance loss before the Dispatcher persisted the `Ack`. Once the lease is committed the Dispatcher sends `Started`; non-idempotent skills begin side effects only after `Started`, so a failure before `Started` is always safe to redeliver. After a committed lease, redelivery requires the skill to be `idempotent` or the task `resumable`; otherwise the task fails with `OWNER_LOST`. The window between the agent's `Ack` and the commit is therefore the only ambiguity, and it is closed by the agent not acting until `Started`. |
 | Delivery to clients | At-least-once via `SubscribeToTask` replay; exactly-once observed by deduping on `(taskId, offset)`. |
 | Idempotency | `(tenant, messageId)` is unique for the dedupe window (default 24 h). A repeat with an identical payload returns the existing task; a repeat with a different payload is `IDEMPOTENCY_CONFLICT`. Durable-execution engines (Temporal, Restate, Inngest) retry freely. |
 | Deadlines | `agenet.io/deadlineMs` is absolute from acceptance. Expiry cancels with reason `DEADLINE_EXCEEDED`; parked tasks fail instead. |
@@ -75,7 +75,8 @@ Delivery sub-states on the task record: `queued` (in a work queue, no lease),
 ## Pause: `INPUT_REQUIRED` and `AUTH_REQUIRED`
 
 - The agent's status message carries the question as ordinary parts. For structured
-  elicitation, a `data` part with JSON Schema under `metadata["agenet.io/inputSchema"]` lets
+  elicitation, a `data` part with JSON Schema under the part's `metadata["agenet.io/inputSchema"]`
+  (`Part` does have `metadata`) lets
   clients render a form; the MCP facade maps this to MRTR.
 - Follow-up is a `SendMessage` with the same `taskId`. The Gateway appends to history and
   routes `Input` to the owner, or redelivers with history if the agent is `resumable`.
