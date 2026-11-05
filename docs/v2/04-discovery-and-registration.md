@@ -99,6 +99,24 @@ that returns a terminal `Task` inline closes the Agenet task in one step. The ca
 re-fetched on the `ttlMs` cadence; a hash change follows the same rules as a dial-out
 re-registration.
 
+**Direct `Message` responses.** A2A allows an agent to answer with a `Message` instead of a
+`Task`: as the unary `SendMessage` result, or as a stream that carries exactly one `Message`
+and then closes. Such an interaction has no downstream task to poll, subscribe to, or cancel,
+so the Dispatcher completes the Agenet task itself, in one atomic task-store write:
+
+1. Append the returned message (role `ROLE_AGENT`) to the task's history.
+2. Emit `TaskStatusUpdateEvent{COMPLETED}` whose `status.message` is that message, so
+   streaming clients, `GetTask`, push notifications, and the MCP facade all see the reply.
+3. Release the lease and record usage, if the message carries `agenet.io/usage`.
+
+The same rule applies on every row of the table above and does not depend on
+`returnImmediately`. A `Message` that arrives on a stream which also carried task events, or
+any further event after a direct `Message`, is a protocol violation: the Dispatcher fails the
+task with reason `INVALID_AGENT_RESPONSE`. While a unary call is in flight, `CancelTask`
+aborts the HTTP request; if the agent's `Message` still arrives first, the task completes and
+the cancel returns A2A `TaskNotCancelable`. Clients of the mesh always receive a `Task`,
+because the Gateway created one at acceptance.
+
 ### Tool agent (MCP servers)
 
 See [06 MCP bridge](06-mcp-bridge.md). The adapter synthesizes a card with one skill per

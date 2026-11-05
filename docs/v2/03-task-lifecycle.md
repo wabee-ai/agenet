@@ -79,7 +79,9 @@ Delivery sub-states on the task record: `queued` (in a work queue, no lease),
   (`Part` does have `metadata`) lets
   clients render a form; the MCP facade maps this to MRTR.
 - Follow-up is a `SendMessage` with the same `taskId`. The Gateway appends to history and
-  routes `Input` to the owner, or redelivers with history if the agent is `resumable`.
+  routes `Input` to the owner, or redelivers with history, committed artifact state, and a
+  resume offset if the skill is `resumable`. The replacement continues open artifacts rather
+  than re-emitting them.
 - Policy `require_approval` uses the same state with a status message whose data part is
   `{ "approval": { "policyId", "reason", "attributes" } }`. Approval is a follow-up from a
   principal allowed by the policy to approve; the Dispatcher then delivers the original message.
@@ -95,5 +97,5 @@ allowlist.
 
 Routing picks the least-loaded instance with free credits among those whose card hash is
 allowed by policy. `contextId` affinity is a hint, not a guarantee: if the previous instance
-is healthy and has credits, it is preferred; otherwise any instance is used and `history` is
-included in `Deliver`.
+is healthy and has credits, it is preferred; otherwise any instance is used and `history`,
+committed `artifacts`, and `resume_offset` are included in `Deliver`.

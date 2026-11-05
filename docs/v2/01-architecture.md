@@ -151,9 +151,9 @@ only through the optional `https://agenet.io/ext/replay/v1` extension.
 4. Gateway validates the task is parked, appends the message to history, and routes it to the
    owning instance as `Input{taskId, message, task_token}` with a freshly minted token. If that
    instance is gone, the task is
-   redelivered to another instance of the same skill with full history, provided the agent card
-   declares `agenet.io/resumable: true`; otherwise the task transitions to `FAILED` with reason
-   `OWNER_LOST`.
+   redelivered to another instance of the same skill with full history and the committed
+   artifact state (see [02](02-wire-contract.md)), provided the skill's routing-extension hint
+   `resumable` is true; otherwise the task transitions to `FAILED` with reason `OWNER_LOST`.
 5. Agent continues, emitting `WORKING` then a terminal state.
 
 The same path serves `AUTH_REQUIRED` (agent needs the user to grant a credential) and a policy

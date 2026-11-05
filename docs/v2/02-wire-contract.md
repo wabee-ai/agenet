@@ -164,6 +164,14 @@ message Deliver {
   string task_token           = 8;              // minted per attempt after instance selection; aud = this agent, bound to lease; see 05
   google.protobuf.Timestamp deadline = 9;
   map<string,string> metadata = 10;             // agenet.io/* keys and trace context
+  repeated ArtifactState artifacts = 11;        // committed artifact state when resuming
+  uint64 resume_offset = 12;                    // task-store offset of the last committed event
+}
+
+message ArtifactState {
+  a2a.v1.Artifact artifact = 1;                 // all durably accepted parts, in order
+  bool closed              = 2;                 // a chunk with lastChunk=true was committed
+  uint32 chunk_count       = 3;                 // committed chunks for this artifactId
 }
 
 message Input  { string task_id = 1; string lease = 2; a2a.v1.Message message = 3;
@@ -191,6 +199,17 @@ message TokenRefresh { string task_id = 1; string lease = 2; string task_token =
   (handled as owner loss, see [03](03-task-lifecycle.md)).
   `Heartbeat` every `heartbeatInterval` (default 10 s) listing in-flight tasks; three missed
   heartbeats release all of the instance's leases.
+- **Resuming on a new instance.** Message history alone does not tell a replacement which
+  output was already published, so every redelivery of a task that has emitted events
+  carries the committed artifact state: `Deliver.artifacts` lists each artifact with all of its
+  durably accepted parts, whether it is `closed`, and its committed chunk count, and
+  `Deliver.resume_offset` is the task-store offset of the last committed event. The
+  replacement MUST continue an open artifact under its existing `artifactId` with
+  `append=true`, emitting only content after the committed parts, and MUST NOT re-emit
+  committed parts or start a new artifact for the same output. The Dispatcher enforces this:
+  an `append=true` update to a `closed` artifact, or an `append=false` update to an existing
+  `artifactId`, is rejected with `FAILED_PRECONDITION` and is not written to the log. A skill
+  that cannot continue from committed state must not declare itself `resumable`.
 - Task tokens are short-lived and renewed on the existing lease, so a healthy task never has
   to be abandoned because its token expired. While the lease is live (heartbeats arriving),
   the Dispatcher sends `TokenRefresh` once two thirds of the current token's lifetime has
