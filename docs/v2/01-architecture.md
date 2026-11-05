@@ -149,7 +149,8 @@ only through the optional `https://agenet.io/ext/replay/v1` extension.
    the client's stream (A2A semantics: an interrupted state closes the stream).
 3. Client sends `SendMessage` with the same `taskId` and `contextId`.
 4. Gateway validates the task is parked, appends the message to history, and routes it to the
-   owning instance as `Input{taskId, message}`. If that instance is gone, the task is
+   owning instance as `Input{taskId, message, task_token}` with a freshly minted token. If that
+   instance is gone, the task is
    redelivered to another instance of the same skill with full history, provided the agent card
    declares `agenet.io/resumable: true`; otherwise the task transitions to `FAILED` with reason
    `OWNER_LOST`.

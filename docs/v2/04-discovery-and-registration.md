@@ -33,6 +33,7 @@ skill id where they are per-skill. This survives the unmodified `a2a.v1.AgentCar
         "idempotent": true,
         "resumable": true,
         "sideEffects": "none",
+        "destructive": false,
         "dataClasses": ["pii"],
         "costHint": { "perCallUsd": 0.05, "tokensPerCall": 4000 },
         "inputSchema": { "type": "object", "properties": { "question": { "type": "string" } } }
@@ -47,14 +48,15 @@ skill id where they are per-skill. This survives the unmodified `a2a.v1.AgentCar
 | `version` | skill | semver | Skill version for range matching |
 | `idempotent` | skill | bool | Allows redelivery after a committed `Ack` |
 | `resumable` | skill | bool | Allows a parked task to move to another instance with history |
-| `sideEffects` | skill | `none`, `local`, `external` | Mirrors MCP's `readOnlyHint`/`destructiveHint`; policy uses it to require approval |
+| `sideEffects` | skill | `none`, `local`, `external` | Where the skill can change state: nowhere, inside a closed domain the mesh controls, or in the open world. Mirrors MCP's `readOnlyHint`/`openWorldHint`; policy uses it to require approval |
+| `destructive` | skill | bool | Whether changes may be destructive rather than additive. Mirrors MCP's `destructiveHint`; policy uses it to require approval independently of `sideEffects` |
 | `dataClasses` | skill | list | Data classifications the skill may handle (`pii`, `phi`, `secret`); policy compares with the request's labels |
 | `costHint` | skill | `{perCallUsd, tokensPerCall}` | Scheduling and budget pre-checks |
 | `inputSchema`, `outputSchema` | skill | JSON Schema 2020-12 | Validation and MCP tool projection |
 | `maxInflight` | card | int | Default capacity if `Register.capacity` is omitted |
 
 Skills with no entry under `params.skills` get the conservative defaults `idempotent=false`,
-`resumable=false`, `sideEffects=external`.
+`resumable=false`, `sideEffects=external`, `destructive=true`.
 
 ## Pinning and rug-pull defense
 
@@ -110,8 +112,18 @@ tool and registers it in dial-out mode.
   `capabilities.extensions[]` advertises the routing extension. Unauthenticated callers get
   the public subset; `GetExtendedAgentCard` returns the full view after auth.
 - `GET /agents/{name}/.well-known/agent-card.json` returns a **virtual card**: the agent's
-  card with `supportedInterfaces[]` rewritten to the virtual endpoint and `securitySchemes`
-  replaced by the Gateway's. Because A2A signatures cover the canonical card content, those
+  card with every authentication field rewritten to describe **Gateway ingress**, not the
+  agent:
+  - `supportedInterfaces[]` points at the virtual endpoint;
+  - `securitySchemes` is replaced by the Gateway's schemes;
+  - the card-level `securityRequirements` and every `skills[].securityRequirements` are
+    replaced so they reference only the Gateway's scheme names, with scopes drawn from the
+    mesh's scope set (the skill id, plus any scopes the tenant maps to that skill).
+
+  The agent's own schemes and requirements describe what it expects on task tokens; the
+  Dispatcher satisfies them when it mints those tokens, and they appear only in the source
+  card. A client following the virtual card therefore obtains exactly the credential the
+  Gateway accepts. Because A2A signatures cover the canonical card content, those
   rewrites invalidate the agent's original `signatures[]`. The Gateway therefore strips them
   and signs the virtual card with the **mesh signing key**, which tenants publish as a trust
   anchor alongside their agent-provider keys. The virtual card records
@@ -121,8 +133,9 @@ tool and registers it in dial-out mode.
   clients that want to verify the agent's own signature. A pure-A2A client uses the virtual
   card and never needs the extension.
 - `GET /agents/{name}/skills/{skill}/.well-known/agent-card.json` returns a **per-skill
-  virtual card**: the same document with `skills[]` reduced to that one skill and
-  `supportedInterfaces[]` pointing at the per-skill endpoint. Requests to that endpoint are
+  virtual card**: the same document, with the same rewritten security fields and mesh
+  signature, with `skills[]` reduced to that one skill and `supportedInterfaces[]` pointing at
+  the per-skill endpoint. Requests to that endpoint are
   unambiguous without any metadata. Agent-level requests to a multi-skill agent that carry no
   `agenet.io/skill` are treated as agent-wide with merged conservative hints (see
   [02](02-wire-contract.md)).

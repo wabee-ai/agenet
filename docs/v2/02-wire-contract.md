@@ -23,8 +23,9 @@ Two ways to target a skill:
    2. the agent's only skill, if its card declares exactly one;
    3. otherwise the request is **agent-wide**: `Deliver` carries no skill, the agent chooses
       internally, and the Dispatcher applies the most conservative hints across the agent's
-      skills (`sideEffects` = highest of `none < local < external`, `idempotent` and
-      `resumable` = logical AND, `dataClasses` = intersection, `costHint` = maximum). Policy
+      skills (`sideEffects` = highest of `none < local < external`, `destructive` = logical
+      OR, `idempotent` and `resumable` = logical AND, `dataClasses` = intersection,
+      `costHint` = maximum). Policy
       sees `skill.id = "*"` with those merged values, so approval and redelivery rules can only
       be stricter than for any individual skill.
 2. **Mesh endpoint with the routing extension.** `https://mesh.example/` accepts any skill on
@@ -141,6 +142,7 @@ message DispatchFrame {
     Credit      credit      = 14;               // Dispatcher grants more credits
     Shutdown    shutdown    = 15;               // Dispatcher is going away; reconnect elsewhere
     Started     started     = 16;               // Ack durably committed; safe to begin side effects
+    TokenRefresh token_refresh = 17;            // fresh task token on the current lease
   }
 }
 
@@ -164,11 +166,13 @@ message Deliver {
   map<string,string> metadata = 10;             // agenet.io/* keys and trace context
 }
 
-message Input  { string task_id = 1; string lease = 2; a2a.v1.Message message = 3; }
+message Input  { string task_id = 1; string lease = 2; a2a.v1.Message message = 3;
+                 string task_token = 4; }       // always a fresh token for the resumed work
 message Cancel { string task_id = 1; string lease = 2; google.rpc.Status reason = 3; }
 message Credit { uint32 credits = 1; }
 message Shutdown { bool drain = 1; uint32 grace_seconds = 2; }
 message Started { string task_id = 1; string lease = 2; uint32 attempt = 3; }
+message TokenRefresh { string task_id = 1; string lease = 2; string task_token = 3; }
 ```
 
 ### Attach rules
@@ -187,6 +191,12 @@ message Started { string task_id = 1; string lease = 2; uint32 attempt = 3; }
   (handled as owner loss, see [03](03-task-lifecycle.md)).
   `Heartbeat` every `heartbeatInterval` (default 10 s) listing in-flight tasks; three missed
   heartbeats release all of the instance's leases.
+- Task tokens are short-lived and renewed on the existing lease, so a healthy task never has
+  to be abandoned because its token expired. While the lease is live (heartbeats arriving),
+  the Dispatcher sends `TokenRefresh` once two thirds of the current token's lifetime has
+  elapsed. `Input` always carries a fresh token, which covers parked tasks whose previous
+  token expired while waiting for the caller. The agent replaces its token on receipt; tokens
+  are never refreshed for a lease that has been released.
 - `TaskEvent.seq` is monotonic per `(task_id, attempt)` and restarts at 1 on every delivery
   attempt, so a new instance never needs to know the previous attempt's counter. The Dispatcher
   deduplicates producer events on `(task_id, attempt, seq)` and drops events whose `attempt`

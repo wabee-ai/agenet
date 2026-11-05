@@ -41,7 +41,15 @@ provide the same skill and the Dispatcher picks among them per attempt:
 | `agenet_task`, `agenet_ctx` | task and context ids; the token is useless for any other task |
 | `agenet_lease`, `agenet_attempt` | the delivery lease and attempt; agents MUST reject a token whose lease is not the one in `Deliver` |
 | `scope` | the skill id plus any downstream scopes the policy allowed |
-| `exp` | the earlier of the task deadline and the lease TTL |
+| `exp` | the earlier of the task deadline and now + `taskTokenTtl` (default 15 min) |
+
+A task can legitimately run longer than one token lifetime, so tokens are renewed rather than
+sized to the task. While the lease is live, the Dispatcher mints a replacement from the stored
+task grant and sends it as `TokenRefresh`; a parked task receives a fresh token in `Input`
+when the caller answers; redelivery mints a new token in `Deliver`. Revocation does not wait
+for `exp`: the authorization server checks that `agenet_lease` is still the task's current
+lease before honouring any callback exchange, so a token from a released or superseded lease
+is dead as soon as the lease is.
 
 When the originating user's identity must reach a third-party API behind the agent, the
 mesh's authorization server issues an ID-JAG assertion (IETF identity assertion authorization
@@ -61,7 +69,8 @@ It obtains one by RFC 8693 token exchange at the mesh's authorization server:
 | `resource` | the mesh's resource indicator |
 | `scope` | the skill it intends to call |
 
-The authorization server verifies that the actor is the task token's audience, then issues a
+The authorization server verifies that the actor is the task token's audience and that the
+token's `agenet_lease` is still the task's current lease, then issues a
 **callback token** with `aud` = mesh, the same `sub`, `agenet_task`, and `agenet_ctx` claims,
 and the actor appended to the `act` chain. The Gateway treats it like any caller token and
 performs the next exchange toward the target agent. Task-token audience isolation is
@@ -120,8 +129,10 @@ decision is written to `agenet.io/policy` on the task and to the trace span.
 
 Policies the mesh ships as defaults:
 
-- A skill with `sideEffects: external` requires `require_approval` unless the root of the
-  delegation chain is a user and the skill is explicitly allow-listed for that client.
+- A skill with `sideEffects: external` **or** `destructive: true` requires `require_approval`
+  unless the root of the delegation chain is a user and the skill is explicitly allow-listed
+  for that client. The two hints are independent: an additive open-world call (posting a
+  message) and a destructive closed-world call (deleting local records) both need approval.
 - A request labelled `pii` or `phi` may only reach agents whose card declares the class.
 - An agent may not call a skill whose provider is the agent's own provider with a longer chain
   than 2 (loop guard), unless the tenant opts out.
