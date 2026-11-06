@@ -166,6 +166,14 @@ message Deliver {
   map<string,string> metadata = 10;             // agenet.io/* keys and trace context
   repeated ArtifactState artifacts = 11;        // committed artifact state when resuming
   uint64 resume_offset = 12;                    // task-store offset of the last committed event
+  ResumeMode resume_mode = 13;                  // how the attempt treats committed output
+}
+
+enum ResumeMode {
+  RESUME_MODE_UNSPECIFIED = 0;
+  RESUME_MODE_FRESH       = 1;                  // no output committed yet; no constraints
+  RESUME_MODE_CONTINUE    = 2;                  // skill is resumable; continue open artifacts
+  RESUME_MODE_RESTART     = 3;                  // idempotent-only skill; rerun and supersede prior output
 }
 
 message ArtifactState {
@@ -203,13 +211,22 @@ message TokenRefresh { string task_id = 1; string lease = 2; string task_token =
   output was already published, so every redelivery of a task that has emitted events
   carries the committed artifact state: `Deliver.artifacts` lists each artifact with all of its
   durably accepted parts, whether it is `closed`, and its committed chunk count, and
-  `Deliver.resume_offset` is the task-store offset of the last committed event. The
-  replacement MUST continue an open artifact under its existing `artifactId` with
-  `append=true`, emitting only content after the committed parts, and MUST NOT re-emit
-  committed parts or start a new artifact for the same output. The Dispatcher enforces this:
-  an `append=true` update to a `closed` artifact, or an `append=false` update to an existing
-  `artifactId`, is rejected with `FAILED_PRECONDITION` and is not written to the log. A skill
-  that cannot continue from committed state must not declare itself `resumable`.
+  `Deliver.resume_offset` is the task-store offset of the last committed event.
+  `Deliver.resume_mode` tells the replacement what to do with that state. The Dispatcher
+  picks it from the skill's hints, preferring continuation when both apply:
+
+  | Mode | Chosen when | Agent obligation | Dispatcher enforcement |
+  |---|---|---|---|
+  | `FRESH` | no event has been committed for the task | none | none |
+  | `CONTINUE` | output committed and the skill is `resumable` | continue each open artifact under its existing `artifactId` with `append=true`, emitting only content after the committed parts; never re-emit committed parts or start a new artifact for the same output | reject with `FAILED_PRECONDITION`, without writing to the log, an `append=true` update to a `closed` artifact or an `append=false` update to an existing `artifactId` |
+  | `RESTART` | output committed and the skill is `idempotent` but not `resumable` | rerun the operation from the beginning; the first update for each reused `artifactId` MUST be `append=false`, and new ids are allowed | before delivering, append `TaskStatusUpdateEvent{WORKING}` with `metadata["agenet.io/restart"] = {attempt, supersededArtifactIds}`; accept `append=false` on a superseded id once per attempt as a replacement; drop superseded artifacts that the attempt has not re-emitted by its terminal state from the task snapshot |
+
+  The restart event lets streaming clients discard earlier chunks before the rerun's output
+  arrives, and `GetTask` after completion shows only the restarted attempt's artifacts. When
+  the agent reuses the ids it receives in `Deliver.artifacts`, clients that ignore the
+  `agenet.io/restart` key still see each artifact replaced in place rather than duplicated. A
+  skill that is neither `resumable` nor `idempotent` is never redelivered after a committed
+  lease; the task fails with `OWNER_LOST`.
 - Task tokens are short-lived and renewed on the existing lease, so a healthy task never has
   to be abandoned because its token expired. While the lease is live (heartbeats arriving),
   the Dispatcher sends `TokenRefresh` once two thirds of the current token's lifetime has
